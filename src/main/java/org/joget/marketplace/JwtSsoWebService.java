@@ -18,6 +18,7 @@ import org.joget.workflow.util.WorkflowUtil;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
 import javax.servlet.ServletException;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -32,7 +33,10 @@ import java.util.Date;
 public class JwtSsoWebService extends ExtDefaultPlugin implements PluginWebSupport {
 
     public static String MESSAGE_PATH = "messages/JwtSsoWebService";
-    public static Long JWT_TTL = 5 * 60 * 1000L;
+    public static Long JWT_TTL = 1 * 60 * 1000L;
+
+    public static String COOKIE_REDIRECT = "jssor";
+    public static int COOKIE_MAX_AGE = 60 * 60;
 
     public static String APP_ID = "jwtsso";
 
@@ -101,7 +105,14 @@ public class JwtSsoWebService extends ExtDefaultPlugin implements PluginWebSuppo
             LogUtil.info(getClass().getName(), "is not logged in, redirecting to login page");
 
             new HttpSessionRequestCache().saveRequest(request, response);
-            response.sendRedirect(request.getContextPath() + "/web/userview/" + APP_ID + "/v/_/jwtsso?embed=true&clientId=" + clientId + "&redirect=" + redirect);
+
+            String url = request.getContextPath() + "/web/userview/" + APP_ID + "/v/_/jwtsso?embed=true&clientId=" + clientId + "&redirect=" + redirect;
+
+            Cookie cookie = new Cookie(COOKIE_REDIRECT, url);
+            cookie.setPath(request.getContextPath());
+            cookie.setMaxAge(COOKIE_MAX_AGE);
+            response.addCookie(cookie);
+            response.sendRedirect(url);
 
         }else{
             LogUtil.info(getClass().getName(), "is logged in, generating jwt");

@@ -15,6 +15,7 @@ public class Activator implements BundleActivator {
 
         //Register plugin here
         registrationList.add(context.registerService(JwtSsoWebService.class.getName(), new JwtSsoWebService(), null));
+        registrationList.add(context.registerService(JwtKeyGeneratorTool.class.getName(), new JwtKeyGeneratorTool(), null));
     }
 
     public void stop(BundleContext context) {

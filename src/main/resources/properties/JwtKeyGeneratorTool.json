@@ -1,0 +1,44 @@
+[
+    {
+        "title": "@@jskg.config@@",
+        "properties": [
+            {
+                "name": "formDefId",
+                "label": "@@jskg.formDefId@@",
+                "type": "selectbox",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
+                "required" : "true"
+            },
+            {
+                "name" : "publicKeyFieldId",
+                "label" : "@@jskg.publicKeyFieldId@@",
+                "type" : "selectbox",
+                "options_ajax_on_change" : "formDefId",
+                "options_ajax" : "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/form/columns/options",
+                "required" : "true",
+                "control_field" : "type",
+                "control_value" : "text",
+                "control_use_regex" : "false"
+            },
+            {
+                "name" : "privateKeyFieldId",
+                "label" : "@@jskg.privateKeyFieldId@@",
+                "type" : "selectbox",
+                "options_ajax_on_change" : "formDefId",
+                "options_ajax" : "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/form/columns/options",
+                "required" : "true",
+                "control_field" : "type",
+                "control_value" : "text",
+                "control_use_regex" : "false"
+            },
+            {
+                "name": "recordId",
+                "label": "@@jskg.recordId@@",
+                "type": "textfield",
+                "control_field" : "type",
+                "control_value" : "text",
+                "control_use_regex" : "false"
+            }
+        ]
+    }
+]
