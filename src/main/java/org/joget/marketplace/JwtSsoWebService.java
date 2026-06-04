@@ -68,8 +68,7 @@ public class JwtSsoWebService extends ExtDefaultPlugin implements PluginWebSuppo
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
-        */
-
+         */
         AppService appService = (AppService) AppUtil.getApplicationContext().getBean("appService");
         FormDataDao formDataDao = (FormDataDao) AppUtil.getApplicationContext().getBean("formDataDao");
         AppDefinition appDef = appService.getAppDefinition(APP_ID, null);
@@ -77,36 +76,38 @@ public class JwtSsoWebService extends ExtDefaultPlugin implements PluginWebSuppo
         //check param
         String clientId = request.getParameter("clientId");
         String redirect = request.getParameter("redirect");
+        String clientCallbackUrl = request.getParameter("callbackUrl");
 
-        if(clientId == null || clientId.isEmpty()){
+        if (clientId == null || clientId.isEmpty()) {
             LogUtil.info(getClass().getName(), "clientId is missing");
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
         FormRowSet rows = formDataDao.find("client", "jwtsso_client", "WHERE e.customProperties.client_id = ?", new String[]{clientId}, null, null, null, null);
-        if(rows == null || rows.size() == 0){
+        if (rows == null || rows.size() == 0) {
             LogUtil.info(getClass().getName(), "no rows with clientId " + clientId + " found");
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
         FormRow row = rows.get(0);
+        String recordId = row.getId();
 
         //validation
         String active = row.getProperty("active");
-        if(active == null || active.isEmpty() || active.equalsIgnoreCase("no") || active.equalsIgnoreCase("false")){
+        if (active == null || active.isEmpty() || active.equalsIgnoreCase("no") || active.equalsIgnoreCase("false")) {
             LogUtil.info(getClass().getName(), "client is not active");
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
-        if(WorkflowUtil.isCurrentUserAnonymous()){
+        if (WorkflowUtil.isCurrentUserAnonymous()) {
             LogUtil.info(getClass().getName(), "is not logged in, redirecting to login page");
 
             new HttpSessionRequestCache().saveRequest(request, response);
 
-            String url = request.getContextPath() + "/web/userview/" + APP_ID + "/v/_/jwtsso?embed=true&clientId=" + clientId + "&redirect=" + redirect;
+            String url = request.getContextPath() + "/web/userview/" + APP_ID + "/v/_/jwtsso?embed=true&clientId=" + clientId + "&redirect=" + redirect + "&callbackUrl=" + clientCallbackUrl;
 
             Cookie cookie = new Cookie(COOKIE_REDIRECT, url);
             cookie.setPath(request.getContextPath());
@@ -114,20 +115,69 @@ public class JwtSsoWebService extends ExtDefaultPlugin implements PluginWebSuppo
             response.addCookie(cookie);
             response.sendRedirect(url);
 
-        }else{
+        } else {
             LogUtil.info(getClass().getName(), "is logged in, generating jwt");
 
-            WorkflowUserManager workflowUserManager = (WorkflowUserManager) AppUtil.getApplicationContext().getBean("workflowUserManager");
-            User user = workflowUserManager.getCurrentUser();
+            // query the callnack url list from table = jwtsso_cb_urls , formDefId = jwtsso_cb_urls
+            FormRowSet urlRows = formDataDao.find("jwtsso_cb_urls", "jwtsso_cb_urls", "WHERE e.customProperties.ref_id = ?", new String[]{recordId}, null, null, null, null);
 
-            long expMillis = System.currentTimeMillis() + JWT_TTL;
-            Date exp = new Date(expMillis);
+            if (urlRows != null && !urlRows.isEmpty()) {
+                boolean validCallback = false;
+                for (FormRow r : urlRows) {
+                    String callbackUrl = r.getProperty("callback_url");
+                    if (callbackUrl != null && callbackUrl.equals(clientCallbackUrl)) {
+                        validCallback = true;
 
-            PrivateKey privateKey = loadPrivateKey(row.getProperty("private_key"));
-            PublicKey publicKey = loadPublicKey(row.getProperty("public_key"));
+                        WorkflowUserManager workflowUserManager = (WorkflowUserManager) AppUtil.getApplicationContext().getBean("workflowUserManager");
+                        User user = workflowUserManager.getCurrentUser();
 
-            if(privateKey == null || publicKey == null){
+                        long expMillis = System.currentTimeMillis() + JWT_TTL;
+                        Date exp = new Date(expMillis);
+
+                        PrivateKey privateKey = loadPrivateKey(row.getProperty("private_key"));
+                        PublicKey publicKey = loadPublicKey(row.getProperty("public_key"));
+
+                        if (privateKey == null || publicKey == null) {
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                            return;
+                        }
+
+                        String jws = Jwts.builder()
+                                .id(UuidGenerator.getInstance().getUuid())
+                                .issuer("Joget")
+                                .subject("sso")
+                                .claim("username", user.getUsername())
+                                .claim("email", user.getEmail())
+                                .claim("firstName", user.getFirstName())
+                                .claim("lastName", user.getLastName())
+                                .issuedAt(new Date())
+                                .expiration(exp)
+                                //.signWith(Keys.hmacShaKeyFor("ymKRak7xa1awUtfZt3Ib8d70X2cFnsNP".getBytes()))
+                                .signWith(privateKey)
+                                .compact();
+
+                        LogUtil.info(getClass().getName(), "jwt: " + jws);
+
+                        String targetCallbackUrl = callbackUrl + "?jwt=" + jws;
+
+                        LogUtil.info(getClass().getName(), "redirecting to " + targetCallbackUrl);
+                        response.sendRedirect(targetCallbackUrl);
+
+                        break;
+                    }
+                }
+
+                if (!validCallback) {
+                    LogUtil.info(getClass().getName(), "no rows with clientId " + clientId + " found");
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
+                }
+
+            } else {
+                LogUtil.info(getClass().getName(), "no callback urls with clientId " + clientId + " found");
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+
             }
 
             /*
@@ -149,28 +199,7 @@ public class JwtSsoWebService extends ExtDefaultPlugin implements PluginWebSuppo
             LogUtil.info(getClass().getName(), "publickey : " + Base64.getEncoder().encodeToString(publicKey.getEncoded()));
             LogUtil.info(getClass().getName(), "publickey : " + publicKey.getFormat());
             LogUtil.info(getClass().getName(), "publickey : " + publicKey.getAlgorithm());
-            */
-
-            String jws = Jwts.builder()
-                    .id(UuidGenerator.getInstance().getUuid())
-                    .issuer("Joget")
-                    .subject("sso")
-                    .claim("username", user.getUsername())
-                    .claim("email", user.getEmail())
-                    .claim("firstName", user.getFirstName())
-                    .claim("lastName", user.getLastName())
-                    .issuedAt(new Date())
-                    .expiration(exp)
-                    //.signWith(Keys.hmacShaKeyFor("ymKRak7xa1awUtfZt3Ib8d70X2cFnsNP".getBytes()))
-                    .signWith(privateKey)
-                    .compact();
-
-            LogUtil.info(getClass().getName(), "jwt: " + jws);
-
-            String callbackUrl = rows.get(0).getProperty("callback_url") + "?jwt=" + jws;
-
-            LogUtil.info(getClass().getName(), "redirecting to " + callbackUrl);
-            response.sendRedirect(callbackUrl);
+             */
         }
     }
 
